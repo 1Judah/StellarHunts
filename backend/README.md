@@ -308,3 +308,18 @@ For production, update `FRONTEND_URL` in your environment configuration.
 - [Root project README](../README.md)
 - [Frontend README](../frontend/README.md)
 - [Contributing Guidelines](../CONTRIBUTING.md)
+
+# API reference
+
+In development, start the backend and open [http://localhost:3001/docs](http://localhost:3001/docs).
+The Swagger UI is generated from the NestJS controllers and DTOs; use **Try it out**
+to inspect and send example requests. The raw OpenAPI document is available at
+`/docs-json`, and the checked-in reference is generated with `npm run openapi:generate`.
+
+Swagger is disabled by default in production, staging, and test environments.
+Set `SWAGGER_ENABLED=true` to expose it there. For example, once enabled:
+
+```sh
+curl http://localhost:3001/docs-json
+curl http://localhost:3001/api/v1/health
+```

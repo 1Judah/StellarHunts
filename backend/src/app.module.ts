@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -60,6 +61,7 @@ import { UserModule } from './user/user.module';
 import { UserRankingModule } from './user-ranking/user-ranking.module';
 import { UserReactionModule } from './user-reaction/user-reaction.module';
 import { UserReportCardModule } from './user-report-card/user-report-card.module';
+import { GlobalExceptionFilter } from './common/exceptions/global-exception.filter';
 
 @Module({
   imports: [
@@ -155,6 +157,10 @@ import { UserReportCardModule } from './user-report-card/user-report-card.module
     OutboxModule,
   ],
   controllers: [AppController],
-  providers: [AppService, GracefulShutdownService],
+  providers: [
+    AppService,
+    GracefulShutdownService,
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+  ],
 })
 export class AppModule {}
