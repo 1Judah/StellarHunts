@@ -135,6 +135,12 @@ pub enum DataKey {
 // ---------------------------------------------------------------------
 
 const CURRENT_SCHEMA_VERSION: u32 = 2;
+// Keep user supplied payloads bounded so hashing, storage, and transaction
+// resource use stay predictable. Soroban Bytes::len() returns u32.
+const MAX_QUESTION_LEN: u32 = 4_096;
+const MAX_ANSWER_LEN: u32 = 1_024;
+const MAX_HINT_LEN: u32 = 2_048;
+const MAX_QUESTIONS_PER_LEVEL: u32 = 1_000;
 
 fn get_schema_version(e: &Env) -> u32 {
     e.storage()
@@ -278,6 +284,10 @@ pub enum Error {
     // go at the end so existing discriminants stay stable.
     QuestionRetired = 15,
     WrongQuestion = 16,
+    InvalidInput = 17,
+    InputTooLarge = 18,
+    CapWouldMakeLevelUnreachable = 19,
+    CapBelowExistingIndex = 20,
 }
 
 // ---------------------------------------------------------------------
@@ -348,6 +358,7 @@ impl StellarHunts {
         if question.is_empty() || answer.is_empty() || hint.is_empty() {
             panic_with_error!(&env, Error::EmptyField);
         }
+        validate_question_input(&env, &question, &answer, &hint);
 
         let count: u64 = env
             .storage()
@@ -406,6 +417,7 @@ impl StellarHunts {
         if question.is_empty() || answer.is_empty() || hint.is_empty() {
             panic_with_error!(&env, Error::EmptyField);
         }
+        validate_question_input(&env, &question, &answer, &hint);
 
         let existing_key = DataKey::Question(question_id);
         let existing: Question = env
@@ -464,6 +476,9 @@ impl StellarHunts {
         if amount == 0 {
             panic_with_error!(&env, Error::EmptyField);
         }
+        if amount > MAX_QUESTIONS_PER_LEVEL {
+            panic_with_error!(&env, Error::InvalidInput);
+        }
         env.storage()
             .instance()
             .set(&DataKey::QuestionPerLevel, &amount);
@@ -482,6 +497,9 @@ impl StellarHunts {
         require_admin(&env);
         if cap == 0 {
             panic_with_error!(&env, Error::CapWouldMakeLevelUnreachable);
+        }
+        if cap > MAX_QUESTIONS_PER_LEVEL {
+            panic_with_error!(&env, Error::InvalidInput);
         }
         // Reject caps below the existing question index so the level remains
         // completable for players already in progress.
@@ -510,7 +528,9 @@ impl StellarHunts {
         }
         let question: Question = env.storage().persistent().get(&key).unwrap();
         remove_question_from_level(&env, question.level.clone(), question_id);
-        env.storage().persistent().set(&DataKey::RetiredQuestion(question_id), &true);
+        env.storage()
+            .persistent()
+            .set(&DataKey::RetiredQuestion(question_id), &true);
         env.events()
             .publish((Symbol::new(&env, "question_retired"),), (question_id,));
     }
@@ -541,6 +561,15 @@ impl StellarHunts {
             panic_with_error!(&env, Error::ContractPaused);
         }
         caller.require_auth();
+        if question_id == 0 {
+            panic_with_error!(&env, Error::QuestionNotFound);
+        }
+        if answer.is_empty() {
+            panic_with_error!(&env, Error::EmptyField);
+        }
+        if answer.len() > MAX_ANSWER_LEN {
+            panic_with_error!(&env, Error::InputTooLarge);
+        }
 
         if read_player_progress(&env, &caller).is_none() {
             Self::initialize_player_progress(env.clone(), caller.clone());
@@ -575,10 +604,16 @@ impl StellarHunts {
         let expected_question_id: u64 = env
             .storage()
             .persistent()
-            .get(&DataKey::QuestionsByLevel(question.level.clone(), lp.last_question_index))
+            .get(&DataKey::QuestionsByLevel(
+                question.level.clone(),
+                lp.last_question_index,
+            ))
             .unwrap_or(0u64);
         if expected_question_id != question_id
-            || env.storage().persistent().has(&DataKey::RetiredQuestion(question_id))
+            || env
+                .storage()
+                .persistent()
+                .has(&DataKey::RetiredQuestion(question_id))
         {
             panic_with_error!(&env, Error::WrongQuestion);
         }
@@ -641,6 +676,9 @@ impl StellarHunts {
 
     pub fn request_hint(env: Env, caller: Address, question_id: u64) -> Bytes {
         caller.require_auth();
+        if question_id == 0 {
+            panic_with_error!(&env, Error::QuestionNotFound);
+        }
 
         let pp = read_player_progress(&env, &caller)
             .ok_or(Error::NotInitialized)
@@ -757,6 +795,9 @@ impl StellarHunts {
     // -----------------------------------------------------------------
 
     pub fn get_question(env: Env, question_id: u64) -> Question {
+        if question_id == 0 {
+            panic_with_error!(&env, Error::QuestionNotFound);
+        }
         match env
             .storage()
             .persistent()
@@ -786,6 +827,9 @@ impl StellarHunts {
     }
 
     pub fn get_question_in_level(env: Env, level: Levels, index: u32) -> Bytes {
+        if index >= index_count(&env, &level) {
+            panic_with_error!(&env, Error::QuestionNotFound);
+        }
         let question_id: u64 = env
             .storage()
             .persistent()
@@ -1001,7 +1045,10 @@ fn remove_question_from_level(env: &Env, level: Levels, question_id: u64) -> u32
     }) else {
         return count;
     };
-    for current in index..count - 1 {
+    let Some(last) = count.checked_sub(1) else {
+        return 0;
+    };
+    for current in index..last {
         let next: u64 = env
             .storage()
             .persistent()
@@ -1011,7 +1058,7 @@ fn remove_question_from_level(env: &Env, level: Levels, question_id: u64) -> u32
             .persistent()
             .set(&DataKey::QuestionsByLevel(level.clone(), current), &next);
     }
-    let new_count = count - 1;
+    let new_count = last;
     env.storage()
         .persistent()
         .remove(&DataKey::QuestionsByLevel(level.clone(), new_count));
@@ -1019,6 +1066,15 @@ fn remove_question_from_level(env: &Env, level: Levels, question_id: u64) -> u32
         .persistent()
         .set(&DataKey::QuestionPerLevelIndex(level), &new_count);
     new_count
+}
+
+fn validate_question_input(env: &Env, question: &Bytes, answer: &Bytes, hint: &Bytes) {
+    if question.len() > MAX_QUESTION_LEN
+        || answer.len() > MAX_ANSWER_LEN
+        || hint.len() > MAX_HINT_LEN
+    {
+        panic_with_error!(env, Error::InputTooLarge);
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -1114,10 +1170,13 @@ fn index_remove_by_id(env: &Env, level: &Levels, question_id: u64) -> Result<boo
     let last_idx = count.checked_sub(1).ok_or(Error::ArithmeticOverflow)?;
 
     for j in i..last_idx {
+        let Some(next_index) = j.checked_add(1) else {
+            return Err(Error::ArithmeticOverflow);
+        };
         let next_qid: u64 = env
             .storage()
             .persistent()
-            .get(&DataKey::QuestionsByLevel(level.clone(), j + 1))
+            .get(&DataKey::QuestionsByLevel(level.clone(), next_index))
             .unwrap_or(0u64);
         env.storage()
             .persistent()

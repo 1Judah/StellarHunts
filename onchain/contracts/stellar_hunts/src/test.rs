@@ -289,19 +289,31 @@ fn test_submit_answer_requires_next_indexed_question() {
     }));
     assert!(out_of_order.is_err());
     assert!(panic_text(&out_of_order).contains("Error(Contract, #16)"));
-    assert_eq!(client.get_player_level_progress(&player, &level).last_question_index, 0);
+    assert_eq!(
+        client
+            .get_player_level_progress(&player, &level)
+            .last_question_index,
+        0
+    );
 
     assert!(client.submit_answer(&player, &1u64, &b(&env, "A1")));
-    env.ledger().set_sequence_number(env.ledger().sequence() + 1);
+    env.ledger()
+        .set_sequence_number(env.ledger().sequence() + 1);
     let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         client.submit_answer(&player, &1u64, &b(&env, "A1"));
     }));
     assert!(duplicate.is_err());
     assert!(panic_text(&duplicate).contains("Error(Contract, #16)"));
-    assert_eq!(client.get_player_level_progress(&player, &level).last_question_index, 1);
+    assert_eq!(
+        client
+            .get_player_level_progress(&player, &level)
+            .last_question_index,
+        1
+    );
     assert_eq!(client.get_player_level(&player), level);
 
-    env.ledger().set_sequence_number(env.ledger().sequence() + 1);
+    env.ledger()
+        .set_sequence_number(env.ledger().sequence() + 1);
     assert!(client.submit_answer(&player, &2u64, &b(&env, "A2")));
     assert_eq!(client.get_player_level(&player), crate::Levels::Medium);
 }
@@ -337,7 +349,8 @@ fn test_retire_question_compacts_level_index_and_answer_order() {
     }));
     assert!(retired_answer.is_err());
     assert!(client.submit_answer(&player, &2u64, &b(&env, "A2")));
-    env.ledger().set_sequence_number(env.ledger().sequence() + 1);
+    env.ledger()
+        .set_sequence_number(env.ledger().sequence() + 1);
     assert!(client.submit_answer(&player, &3u64, &b(&env, "A3")));
     assert_eq!(client.get_player_level(&player), crate::Levels::Medium);
 }
@@ -1584,12 +1597,7 @@ fn assert_index_invariant(
     step: usize,
 ) {
     let op_desc = op.describe();
-    let levels = [
-        Levels::Easy,
-        Levels::Medium,
-        Levels::Hard,
-        Levels::Master,
-    ];
+    let levels = [Levels::Easy, Levels::Medium, Levels::Hard, Levels::Master];
 
     env.as_contract(contract_id, || {
         let mut seen_across_levels: std::vec::Vec<u64> = std::vec::Vec::new();
@@ -1703,22 +1711,31 @@ fn test_index_invariant_holds_after_each_interleaved_admin_operation() {
         &Levels::Medium,
         &b(&env, "H3"),
     );
-    live.iter_mut()
-        .find(|(id, _)| *id == 3)
-        .unwrap()
-        .1 = Levels::Medium;
-    check(&live, &AdminOp::MoveQuestion(3, Levels::Easy, Levels::Medium));
+    live.iter_mut().find(|(id, _)| *id == 3).unwrap().1 = Levels::Medium;
+    check(
+        &live,
+        &AdminOp::MoveQuestion(3, Levels::Easy, Levels::Medium),
+    );
 
     // Criterion: a move is followed by an enumeration through
     // `get_question_in_level`, and every level enumerates exactly the
     // live questions in their index order.
-    assert_eq!(client.get_question_in_level(&Levels::Easy, &0u32), b(&env, "Q1"));
-    assert_eq!(client.get_question_in_level(&Levels::Medium, &0u32), b(&env, "Q2"));
+    assert_eq!(
+        client.get_question_in_level(&Levels::Easy, &0u32),
+        b(&env, "Q1")
+    );
+    assert_eq!(
+        client.get_question_in_level(&Levels::Medium, &0u32),
+        b(&env, "Q2")
+    );
     assert_eq!(
         client.get_question_in_level(&Levels::Medium, &1u32),
         b(&env, "Q3-moved")
     );
-    assert_eq!(client.get_question_in_level(&Levels::Hard, &0u32), b(&env, "Q4"));
+    assert_eq!(
+        client.get_question_in_level(&Levels::Hard, &0u32),
+        b(&env, "Q4")
+    );
 
     // Retire Q2: the first Medium slot compacts and Q3-moved shifts down.
     client.retire_question(&2u64);
@@ -1737,10 +1754,7 @@ fn test_index_invariant_holds_after_each_interleaved_admin_operation() {
         &Levels::Easy,
         &b(&env, "H4"),
     );
-    live.iter_mut()
-        .find(|(id, _)| *id == 4)
-        .unwrap()
-        .1 = Levels::Easy;
+    live.iter_mut().find(|(id, _)| *id == 4).unwrap().1 = Levels::Easy;
     check(&live, &AdminOp::MoveQuestion(4, Levels::Hard, Levels::Easy));
 
     // `set_question_per_level` is part of the interleaved surface. Lowering
@@ -1827,6 +1841,9 @@ fn test_index_invariant_when_a_level_is_drained_by_retirements() {
     });
 
     // The remaining Medium question is untouched and still enumerates.
-    assert_eq!(client.get_question_in_level(&Levels::Medium, &0u32), b(&env, "Q3"));
+    assert_eq!(
+        client.get_question_in_level(&Levels::Medium, &0u32),
+        b(&env, "Q3")
+    );
     check(&live, &AdminOp::RetireQuestion(999));
 }
