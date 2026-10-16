@@ -94,7 +94,7 @@ export class CacheService implements OnApplicationShutdown {
         }
         return fresh;
       } finally {
-        this.inFlight.delete(key);
+        this.inFlight.delete(scopedKey);
       }
     })();
 

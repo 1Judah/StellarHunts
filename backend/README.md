@@ -159,6 +159,28 @@ Because `autoLoadEntities` only loads registered entities, always use this
 script (or the `entity-registration.spec.ts` unit test) rather than adding
 entity classes to `AppModule` by hand.
 
+## Profile and deployment health APIs
+
+`GET /api/v1/users/:id/profile` returns the public user profile together with
+the user's leaderboard score/rank, puzzle and challenge completion counts,
+and badge inventory. The aggregated response is cached in Redis for 60 seconds
+to keep repeat profile reads low-latency; cache misses are coalesced so
+concurrent requests for the same user share one aggregation.
+
+Deployment probes are available without the versioned API prefix:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /healthz` | Liveness; confirms the process is accepting requests without depending on external services. |
+| `GET /readyz` | Readiness; returns `503` if PostgreSQL, Redis, or the required Stellar RPC dependency is unavailable. |
+
+The existing versioned endpoints `/api/v1/health/live` and
+`/api/v1/health/ready` remain available. In mock Stellar mode, RPC is not
+required for readiness; outside mock mode, an unavailable or unconfigured RPC
+endpoint fails readiness. The backend e2e workflow builds and starts the
+production server and requires both root-level probes to pass before running
+the e2e suite.
+
 ### Scripts
 
 | Script               | Command                    | Purpose                                              |

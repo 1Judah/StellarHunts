@@ -72,4 +72,12 @@ export class UserController {
   getById(@Param('id') id: string) {
     return this.userService.getUserById(id);
   }
+
+  @Get(':id/profile')
+  @ApiOperation({
+    summary: 'Get user profile with cached score, badge, and completion statistics',
+  })
+  getProfile(@Param('id') id: string) {
+    return this.userService.getProfile(id);
+  }
 }
