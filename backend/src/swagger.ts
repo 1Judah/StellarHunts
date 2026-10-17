@@ -56,6 +56,10 @@ export function setupSwagger(
     'docs',
     app,
     SwaggerModule.createDocument(app, buildSwaggerConfig(configService)),
+    {
+      customSiteTitle: 'StellarHunts API Reference',
+      swaggerOptions: { tryItOutEnabled: true },
+    },
   );
 
   return true;

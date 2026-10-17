@@ -183,7 +183,9 @@ export class StreakService {
       streak.lastResetAt = new Date();
     }
 
-    return streakRepo.save(streak);
+    const saved = await streakRepo.save(streak);
+    await this.cacheService?.invalidatePrefix('streak:leaderboard:');
+    return saved;
   }
 
   async getStreakStats(
@@ -359,7 +361,9 @@ export class StreakService {
     streak.lastResetAt = new Date();
     streak.streakStartDate = null;
 
-    return this.streakRepository.save(streak);
+    const saved = await this.streakRepository.save(streak);
+    await this.cacheService?.invalidatePrefix('streak:leaderboard:');
+    return saved;
   }
 
   async getAllActiveStreaks(): Promise<Streak[]> {
@@ -385,6 +389,10 @@ export class StreakService {
       .andWhere('isActive = :isActive', { isActive: true })
       .execute();
 
-    return result.affected || 0;
+    const affected = result.affected || 0;
+    if (affected > 0) {
+      await this.cacheService?.invalidatePrefix('streak:leaderboard:');
+    }
+    return affected;
   }
 }

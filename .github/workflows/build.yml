@@ -499,6 +499,28 @@ jobs:
           cat /tmp/stellarhunts-frontend.log
           exit 1
 
+      - name: Install Chrome for accessibility audits
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Run axe accessibility audit
+        run: npx --yes @axe-core/cli@4.10.2 http://127.0.0.1:3000 --chrome-path "$(which chrome)" --exit > /tmp/axe-a11y.txt 2>&1
+
+      - name: Run Lighthouse accessibility audit
+        run: npx --yes lighthouse@12.8.2 http://127.0.0.1:3000 --chrome-path="$(which chrome)" --only-categories=accessibility --output=json --output-path=/tmp/lighthouse-a11y.json --quiet
+
+      - name: Enforce tracked accessibility baseline
+        run: node frontend/scripts/check-a11y-baseline.js /tmp/lighthouse-a11y.json
+
+      - name: Attach accessibility reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-audit-reports
+          path: |
+            /tmp/lighthouse-a11y.json
+            /tmp/axe-a11y.txt
+          if-no-files-found: ignore
+
       - name: Stop production server
         if: always()
         run: |
