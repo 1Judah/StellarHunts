@@ -364,6 +364,27 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Build and smoke-test deployment health probes
+        working-directory: backend
+        run: |
+          npm run build
+          npm run start:prod > /tmp/stellarhunts-backend.log 2>&1 &
+          backend_pid=$!
+          trap 'kill "$backend_pid" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3001/healthz >/dev/null \
+              && curl --fail --silent http://127.0.0.1:3001/readyz >/dev/null; then
+              echo "Deployment health and readiness probes passed."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          cat /tmp/stellarhunts-backend.log
+          echo "::error::Backend did not become healthy and ready."
+          exit 1
+
       - name: Run e2e tests
         working-directory: backend
         run: npm run test:e2e
