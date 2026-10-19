@@ -521,7 +521,7 @@ jobs:
           exit 1
 
       - name: Install Chrome for accessibility audits
-        uses: browser-actions/setup-chrome@v1
+        uses: browser-actions/setup-chrome@v2
 
       - name: Run axe accessibility audit
         run: npx --yes @axe-core/cli@4.10.2 http://127.0.0.1:3000 --chrome-path "$(which chrome)" --exit > /tmp/axe-a11y.txt 2>&1
